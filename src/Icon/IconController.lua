@@ -10,15 +10,6 @@ local VRService = game:GetService("VRService")
 local voiceChatService = game:GetService("VoiceChatService")
 local localizationService = game:GetService("LocalizationService")
 local iconModule = script.Parent
-local TopbarPlusReference = require(iconModule.TopbarPlusReference)
-local referenceObject = TopbarPlusReference.getObject()
-local leadPackage = referenceObject and referenceObject.Value
-if leadPackage and leadPackage.IconController ~= script then
-	return require(leadPackage.IconController)
-end
-if not referenceObject then
-    TopbarPlusReference.addToReplicatedStorage()
-end
 local IconController = {}
 local Signal = require(iconModule.Signal)
 local TopbarPlusGui = require(iconModule.TopbarPlusGui)
@@ -28,9 +19,7 @@ local menuOpen
 local topbarUpdating = false
 local cameraConnection
 local controllerMenuOverride
-local isStudio = runService:IsStudio()
 local localPlayer = players.LocalPlayer
-local voiceChatIsEnabledForUserAndWithinExperience = false
 local disableControllerOption = false
 local STUPID_CONTROLLER_OFFSET = 32
 
@@ -40,8 +29,9 @@ local STUPID_CONTROLLER_OFFSET = 32
 local function checkTopbarEnabled()
 	local success, bool = xpcall(function()
 		return starterGui:GetCore("TopbarEnabled")
-	end,function(err)
-		--has not been registered yet, but default is that is enabled
+
+	end, function(_) -- _ is the error message
+		-- Has not been registered yet, but default is that is enabled
 		return true
 	end)
 	return (success and bool)
@@ -82,7 +72,7 @@ alignmentDetails["mid"] = {
 	getOffset = function()
 		return 0
 	end,
-	getStartOffset = function(totalIconX) 
+	getStartOffset = function(totalIconX)
 		local alignmentGap = IconController["midGap"]
 		return -totalIconX/2 + (alignmentGap/2)
 	end,
@@ -116,7 +106,7 @@ IconController.midGap = 12
 IconController.rightGap = 12
 IconController.leftOffset = 0
 IconController.rightOffset = 0
-IconController.voiceChatEnabled = nil
+IconController.voiceChatEnabled = true
 IconController.mimicCoreGui = true
 IconController.healthbarDisabled = false
 IconController.activeButtonBCallbacks = 0
@@ -276,8 +266,8 @@ function IconController.updateTopbar()
 		topbarUpdating = true
 		runService.Heartbeat:Wait()
 		topbarUpdating = false
-		
-		for alignment, alignmentInfo in pairs(alignmentDetails) do
+
+		for _, alignmentInfo in pairs(alignmentDetails) do
 			alignmentInfo.records = {}
 		end
 
@@ -298,24 +288,21 @@ function IconController.updateTopbar()
 				end
 			end
 			local totalIconX = 0
-			for i, otherIcon in pairs(records) do
+			for _, otherIcon in pairs(records) do
 				local increment = getIncrement(otherIcon, alignment)
 				totalIconX = totalIconX + increment
 			end
 			local offsetX = alignmentInfo.getStartOffset(totalIconX, alignment)
 			local preOffsetX = offsetX
-			local containerX = TopbarPlusGui.TopbarContainer.AbsoluteSize.X
-			for i, otherIcon in pairs(records) do
-				local increment, preOffset = getIncrement(otherIcon, alignment)
-				local newAbsoluteX = alignmentInfo.startScale*containerX + preOffsetX+preOffset
+			for _, otherIcon in pairs(records) do
+				local increment, _ = getIncrement(otherIcon, alignment)
 				preOffsetX = preOffsetX + increment
 			end
-			for i, otherIcon in pairs(records) do
+			for _, otherIcon in pairs(records) do
 				local container = otherIcon.instances.iconContainer
 				local increment, preOffset = getIncrement(otherIcon, alignment)
 				local topPadding = otherIcon.topPadding
 				local newPositon = UDim2.new(alignmentInfo.startScale, offsetX+preOffset, topPadding.Scale, topPadding.Offset)
-				local isAnOverflowIcon = string.match(otherIcon.name, "_overflowIcon-")
 				local repositionInfo = otherIcon:get("repositionInfo")
 				if repositionInfo then
 					tweenService:Create(container, repositionInfo, {Position = newPositon}):Play()
@@ -359,7 +346,7 @@ function IconController.updateTopbar()
 				local oppositeAlignment = (alignment == "left" and "right") or "left"
 				local oppositeAlignmentInfo = alignmentDetails[oppositeAlignment]
 				local oppositeOverflowIcon = IconController.getIcon("_overflowIcon-"..oppositeAlignment)
-				
+
 				-- This determines whether any icons (from opposite or mid alignment) are overlapping with this alignment
 				local overflowBoundaryX = getBoundaryX(overflowIcon, alignment)
 				if overflowIcon.enabled then
@@ -457,9 +444,9 @@ function IconController.updateTopbar()
 							break
 						end
 					end
-				
+
 				else
-					
+
 					-- This checks to see if the lowest/highest (depending on left/right) ordered overlapping icon is no longer overlapping, removes from the dropdown, and repeats if valid
 					local winningOrder, winningOverlappedIcon
 					local totalOverlappingIcons = #overflowIcon.dropdownIcons
@@ -538,7 +525,7 @@ function IconController.setTopbarEnabled(bool, forceBool)
 				if controllerMenuOverride and controllerMenuOverride.Connected then
 					controllerMenuOverride:Disconnect()
 				end
-				
+
 				if hapticService:IsVibrationSupported(Enum.UserInputType.Gamepad1) and hapticService:IsMotorSupported(Enum.UserInputType.Gamepad1,Enum.VibrationMotor.Small) then
 					hapticService:SetMotor(Enum.UserInputType.Gamepad1,Enum.VibrationMotor.Small,1)
 					delay(0.2,function()
@@ -555,8 +542,8 @@ function IconController.setTopbarEnabled(bool, forceBool)
 					0.1,
 					true
 				)
-				
-				
+
+
 				local selectIcon
 				local targetOffset = 0
 				IconController:_updateSelectionGroup()
@@ -601,6 +588,7 @@ function IconController.setTopbarEnabled(bool, forceBool)
 					end
 				end)
 			else
+				-- selene: allow(if_same_then_else)
 				indicator.Visible = false
 			end
 			if not TopbarPlusGui.TopbarContainer.Visible then return end
@@ -659,7 +647,6 @@ function IconController.setRightOffset(value)
 	IconController.updateTopbar()
 end
 
-local localPlayer = players.LocalPlayer
 local iconsToClearOnSpawn = {}
 localPlayer.CharacterAdded:Connect(function()
 	for _, icon in pairs(iconsToClearOnSpawn) do
@@ -669,7 +656,9 @@ localPlayer.CharacterAdded:Connect(function()
 end)
 function IconController.clearIconOnSpawn(icon)
 	coroutine.wrap(function()
-		local char = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+		if not localPlayer.Character then
+			localPlayer.CharacterAdded:Wait()
+		end
 		table.insert(iconsToClearOnSpawn, icon)
 	end)()
 end
@@ -688,7 +677,7 @@ function IconController:_updateSelectionGroup(clearAll)
 	elseif IconController.controllerModeEnabled then
 		local icons = IconController.getIcons()
 		local iconContainers = {}
-		for i, otherIcon in pairs(icons) do
+		for _, otherIcon in pairs(icons) do
 			local featureName = otherIcon.joinedFeatureName
 			if not featureName or otherIcon._parentIcon[otherIcon.joinedFeatureName.."Open"] == true then
 				table.insert(iconContainers, otherIcon.instances.iconButton)
@@ -727,7 +716,6 @@ end
 
 function IconController._enableControllerMode(bool)
 	local indicator = TopbarPlusGui.Indicator
-	local controllerOptionIcon = IconController.getIcon("_TopbarControllerOption")
 	if IconController.controllerModeEnabled == bool then
 		return
 	end
@@ -783,7 +771,7 @@ function IconController._enableControllerModeForIcon(icon, bool)
 			if previousAlignment then
 				icon:set("alignment", previousAlignment, iconState)
 			end
-			local currentSize, previousSize = icon:get("iconSize", iconState, "controllerMode")
+			local _, previousSize = icon:get("iconSize", iconState, "controllerMode")
 			if previousSize then
 				icon:set("iconSize", previousSize, iconState)
 			end
@@ -956,7 +944,7 @@ end
 -- BEHAVIOUR
 --Controller support
 coroutine.wrap(function()
-	
+
 	-- Create PC 'Enter Controller Mode' Icon
 	runService.Heartbeat:Wait() -- This is required to prevent an infinite recursion
 	local Icon = require(iconModule)
@@ -989,7 +977,7 @@ coroutine.wrap(function()
 	controllerOptionIcon.deselected:Connect(iconClicked)
 
 	-- Hide/show topbar when indicator action selected in controller mode
-	userInputService.InputBegan:Connect(function(input,gpe)
+	userInputService.InputBegan:Connect(function(input, _)
 		if not IconController.controllerModeEnabled then return end
 		if input.KeyCode == Enum.KeyCode.DPadDown then
 			if not guiService.SelectedObject and checkTopbarEnabledAccountingForMimic() then
@@ -1054,50 +1042,23 @@ coroutine.wrap(function()
 		local function checkVoiceChatManuallyEnabled()
 			if IconController.voiceChatEnabled then
 				if success and enabledForUser then
-					voiceChatIsEnabledForUserAndWithinExperience = true
 					IconController.updateTopbar()
 				end
 			end
 		end
 		checkVoiceChatManuallyEnabled()
-		
+
 		--------------- FEEL FREE TO DELETE THIS IS YOU DO NOT USE VOICE CHAT WITHIN YOUR EXPERIENCE ---------------
-		localPlayer.PlayerGui:WaitForChild("TopbarPlus", 999)
-		task.delay(10, function()
-			checkVoiceChatManuallyEnabled()
-			if IconController.voiceChatEnabled == nil and success and enabledForUser and isStudio then
-				warn("⚠️TopbarPlus Action Required⚠️ If VoiceChat is enabled within your experience it's vital you set IconController.voiceChatEnabled to true ``require(game.ReplicatedStorage.Icon.IconController).voiceChatEnabled = true`` otherwise the BETA label will not be accounted for within your live servers. This warning will disappear after doing so. Feel free to delete this warning or to set to false if you don't have VoiceChat enabled within your experience.")
-			end
-		end)
+		-- localPlayer.PlayerGui:WaitForChild("TopbarPlus", 999)
+		-- task.delay(10, function()
+		-- 	checkVoiceChatManuallyEnabled()
+		-- 	if IconController.voiceChatEnabled == nil and success and enabledForUser and isStudio then
+		-- 		warn("⚠️TopbarPlus Action Required⚠️ If VoiceChat is enabled within your experience it's vital you set IconController.voiceChatEnabled to true ``require(game.ReplicatedStorage.Icon.IconController).voiceChatEnabled = true`` otherwise the BETA label will not be accounted for within your live servers. This warning will disappear after doing so. Feel free to delete this warning or to set to false if you don't have VoiceChat enabled within your experience.")
+		-- 	end
+		-- end)
 		------------------------------------------------------------------------------------------------------------
 
 	end)
-	
-	
-	
-
-
-	if not isStudio then
-		local ownerId = game.CreatorId
-		local groupService = game:GetService("GroupService")
-		if game.CreatorType == Enum.CreatorType.Group then
-			local success, ownerInfo = pcall(function() return groupService:GetGroupInfoAsync(game.CreatorId).Owner end)
-			if success then
-				ownerId = ownerInfo.Id
-			end
-		end
-		local version = require(iconModule.VERSION)
-		if localPlayer.UserId ~= ownerId then
-			local marketplaceService = game:GetService("MarketplaceService")
-			local success, placeInfo = pcall(function() return marketplaceService:GetProductInfo(game.PlaceId) end)
-			if success and placeInfo then
-				-- Required attrbute for using TopbarPlus
-				-- This is not printed within stuido and to the game owner to prevent mixing with debug prints
-				local gameName = placeInfo.Name
-				print(("\n\n\n⚽ %s uses TopbarPlus-Forked %s\n🍍 TopbarPlus-Forked was originally developed by ForeverHD and the Nanoblox Team, forked by iamEvanRBLX.\n🚀 You can learn more and take a free copy by searching for 'TopbarPlus' on the DevForum\n\n"):format(gameName, version))
-			end
-		end
-	end
 
 end)()
 
@@ -1170,7 +1131,6 @@ task.spawn(function()
 end)
 
 local function topbarInsetChanged()
-	local topbarInset = guiService.TopbarInset
 	IconController.updateTopbar()
 end
 pcall(topbarInsetChanged)
